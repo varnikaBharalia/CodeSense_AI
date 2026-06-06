@@ -37,8 +37,7 @@ import json
 import asyncio
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
-from langchain.schema import SystemMessage, HumanMessage
-
+from langchain_core.messages import SystemMessage, HumanMessage
 load_dotenv()
 
 
