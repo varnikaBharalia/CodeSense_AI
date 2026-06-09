@@ -19,6 +19,13 @@ import streamlit as st          # The web framework — turns Python into a web 
 import asyncio                  # For running multiple agents at the same time (concurrently)
 import time                     # To measure how long the review takes
 from datetime import datetime   # To timestamp each review
+import os
+
+if not os.getenv("GROQ_API_KEY"):
+    st.set_page_config(page_title="CodeSense AI", page_icon="⚡")
+    st.error("⚠️ GROQ_API_KEY is not set. Add it to your .env file or Render environment variables.")
+    st.stop()
+
 
 # ── Our own modules ──────────────────────────────────────────────────────────
 from agents.bug_agent      import run_bug_agent        # Finds logic/runtime bugs
@@ -436,46 +443,91 @@ async def run_all_agents(code: str, language: str) -> dict:
 #  Called when user clicks the "Review Code" button.
 #  Runs the async agents, then gets a refactored version sequentially.
 # ══════════════════════════════════════════════════════════════════════════════
-def perform_review(code: str, language: str):
+# def perform_review(code: str, language: str):
+#     """
+#     Orchestrates the full review pipeline:
+#     1. Detect language (if 'Auto')
+#     2. Run 3 agents concurrently
+#     3. Run refactor agent (uses findings from step 2 as context)
+#     4. Calculate scores
+#     5. Store everything in session state
+#     """
+#     start_time = time.time()
+
+#     # Step 1: Auto-detect language if user didn't specify
+#     if language == "Auto Detect":
+#         language = detect_language(code)
+
+#     # Step 2: Run all analysis agents concurrently
+#     # asyncio.run() starts a new event loop and blocks until complete
+#     agent_results = asyncio.run(run_all_agents(code, language))
+
+#     # Step 3: Run refactor agent (it gets the issues as context so it
+#     # knows WHAT to fix, not just that things are wrong)
+#     refactored = asyncio.run(
+#         run_refactor_agent(code, language, agent_results)
+#     )
+
+#     # Step 4: Calculate numeric scores from the findings
+#     scores = calculate_score(agent_results)
+
+#     # Step 5: Package everything into one results dict
+#     st.session_state.review_results = {
+#         "code":       code,
+#         "language":   language,
+#         "bugs":       agent_results["bugs"],
+#         "security":   agent_results["security"],
+#         "quality":    agent_results["quality"],
+#         "refactored": refactored,
+#         "scores":     scores,
+#         "timestamp":  datetime.now().strftime("%H:%M:%S")
+#     }
+#     st.session_state.review_time = round(time.time() - start_time, 1)
+
+
+
+
+async def _full_pipeline(code: str, language: str, run_refactor: bool) -> tuple:
+    """Single async pipeline — runs once, avoids double asyncio.run() crash."""
+    agent_results = await run_all_agents(code, language)
+    refactored = {}
+    if run_refactor:
+        refactored = await run_refactor_agent(code, language, agent_results)
+    return agent_results, refactored
+
+
+def perform_review(code: str, language: str, run_refactor: bool = True):
     """
-    Orchestrates the full review pipeline:
-    1. Detect language (if 'Auto')
-    2. Run 3 agents concurrently
-    3. Run refactor agent (uses findings from step 2 as context)
-    4. Calculate scores
-    5. Store everything in session state
+    Orchestrates the full review pipeline with error handling.
     """
-    start_time = time.time()
+    try:
+        start_time = time.time()
 
-    # Step 1: Auto-detect language if user didn't specify
-    if language == "Auto Detect":
-        language = detect_language(code)
+        if language == "Auto Detect":
+            language = detect_language(code)
 
-    # Step 2: Run all analysis agents concurrently
-    # asyncio.run() starts a new event loop and blocks until complete
-    agent_results = asyncio.run(run_all_agents(code, language))
+        # Single asyncio.run() — avoids RuntimeError on hosted environments
+        agent_results, refactored = asyncio.run(
+            _full_pipeline(code, language, run_refactor)
+        )
 
-    # Step 3: Run refactor agent (it gets the issues as context so it
-    # knows WHAT to fix, not just that things are wrong)
-    refactored = asyncio.run(
-        run_refactor_agent(code, language, agent_results)
-    )
+        scores = calculate_score(agent_results)
 
-    # Step 4: Calculate numeric scores from the findings
-    scores = calculate_score(agent_results)
+        st.session_state.review_results = {
+            "code":       code,
+            "language":   language,
+            "bugs":       agent_results["bugs"],
+            "security":   agent_results["security"],
+            "quality":    agent_results["quality"],
+            "refactored": refactored,
+            "scores":     scores,
+            "timestamp":  datetime.now().strftime("%H:%M:%S")
+        }
+        st.session_state.review_time = round(time.time() - start_time, 1)
 
-    # Step 5: Package everything into one results dict
-    st.session_state.review_results = {
-        "code":       code,
-        "language":   language,
-        "bugs":       agent_results["bugs"],
-        "security":   agent_results["security"],
-        "quality":    agent_results["quality"],
-        "refactored": refactored,
-        "scores":     scores,
-        "timestamp":  datetime.now().strftime("%H:%M:%S")
-    }
-    st.session_state.review_time = round(time.time() - start_time, 1)
+    except Exception as e:
+        st.error(f"❌ Analysis failed: {str(e)}. Check your API key or try again.")
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -514,10 +566,29 @@ with left_col:
 
     # The main code input area
     # height=400 gives comfortable space for medium-sized functions
+#     code_input = st.text_area(
+#         "Paste your code here",
+#         height=400,
+#         placeholder="""# Example: paste any code snippet
+# def calculate_discount(price, discount):
+#     result = price / discount   # Bug: division, not subtraction
+#     password = "admin123"       # Security: hardcoded credential
+#     return result
+# """,
+#         help="Paste any code snippet — functions, classes, or full files"
+#     )
+
+
+
+# Pre-fill textarea if a sample was clicked
+    default_code = st.session_state.pop("sample_code", "")
+
     code_input = st.text_area(
         "Paste your code here",
+        value=default_code,
         height=400,
         placeholder="""# Example: paste any code snippet
+
 def calculate_discount(price, discount):
     result = price / discount   # Bug: division, not subtraction
     password = "admin123"       # Security: hardcoded credential
@@ -525,6 +596,7 @@ def calculate_discount(price, discount):
 """,
         help="Paste any code snippet — functions, classes, or full files"
     )
+
 
     # Options row — two toggles side by side
     opt_col1, opt_col2 = st.columns(2)
@@ -538,16 +610,29 @@ def calculate_discount(price, discount):
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ── REVIEW BUTTON ──────────────────────────────────────────────────────
+    # if st.button("⚡ Review Code", type="primary"):
+    #     if not code_input.strip():
+    #         st.error("Please paste some code before reviewing.")
+    #     elif len(code_input.strip()) < 20:
+    #         st.warning("Code seems too short. Paste a real function or class.")
+    #     else:
+    #         # Show a spinner while the agents are working
+    #         with st.spinner("Running multi-agent analysis..."):
+    #             perform_review(code_input, language)
+    #         st.rerun()   # Trigger a re-render to show results
+
+
     if st.button("⚡ Review Code", type="primary"):
         if not code_input.strip():
             st.error("Please paste some code before reviewing.")
         elif len(code_input.strip()) < 20:
             st.warning("Code seems too short. Paste a real function or class.")
+        elif len(code_input.splitlines()) > 300:
+            st.warning("⚠️ Code exceeds 300 lines. Trim it down for best results — the AI has a context limit.")
         else:
-            # Show a spinner while the agents are working
             with st.spinner("Running multi-agent analysis..."):
-                perform_review(code_input, language)
-            st.rerun()   # Trigger a re-render to show results
+                perform_review(code_input, language, show_refactor)
+            st.rerun()
 
     # ── SAMPLE CODE BUTTONS ──────────────────────────────────────────────
     # These let users try the app without typing any code
@@ -641,10 +726,12 @@ public class FileProcessor {
     # If a sample was selected in a previous run, pre-fill the textarea
     # (Streamlit doesn't support direct textarea value injection after render,
     # so we show it as a read-only preview instead)
-    if "sample_code" in st.session_state:
-        st.info("Sample loaded! Copy the code above into the input box.")
-        st.code(st.session_state["sample_code"])
-
+    # if "sample_code" in st.session_state:
+    #     st.info("Sample loaded! Copy the code above into the input box.")
+    #     st.code(st.session_state["sample_code"])
+    if "sample_code" in st.session_state:        # line 644 — DELETE
+        st.info("Sample loaded! Copy the code above into the input box.")  # line 645 — DELETE
+        st.code(st.session_state["sample_code"])  # line 646 — DELETE
 
 # ─────────────────────────────────────────────────────
 #  RIGHT COLUMN — Results Panel

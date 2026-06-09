@@ -36,6 +36,9 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 load_dotenv()
+import asyncio
+from langchain_core.messages import SystemMessage, HumanMessage
+from utils.llm_utils import get_llm, parse_json_response   # ← use shared utils
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  LLM INITIALIZATION
@@ -188,7 +191,7 @@ Remember: return ONLY a JSON array of bugs found."""
     # Run the synchronous LangChain call in a thread pool
     # This allows other agents to run simultaneously
     def _call_llm():
-        response = llm.invoke(messages)
+        response = get_llm().invoke(messages)   # ← uses shared singleton
         return response.content  # Extract the text from the response object
 
     # asyncio.to_thread() — run blocking I/O in a separate thread
@@ -196,6 +199,6 @@ Remember: return ONLY a JSON array of bugs found."""
     raw_response = await asyncio.to_thread(_call_llm)
 
     # Parse the JSON response into a Python list
-    issues = _parse_json_response(raw_response)
+    issues = parse_json_response(raw_response)    # NEW — use shared one
 
     return issues
