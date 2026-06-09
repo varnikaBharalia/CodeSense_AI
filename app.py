@@ -20,6 +20,10 @@ import asyncio                  # For running multiple agents at the same time (
 import time                     # To measure how long the review takes
 from datetime import datetime   # To timestamp each review
 import os
+# import os
+from dotenv import load_dotenv  # 👈 Added this import
+
+load_dotenv()
 
 if not os.getenv("GROQ_API_KEY"):
     st.set_page_config(page_title="CodeSense AI", page_icon="⚡")

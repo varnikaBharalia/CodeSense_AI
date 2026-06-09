@@ -1,6 +1,13 @@
+# services:
+#   - type: web
+#     name: codesense-ai
+#     env: python
+#     buildCommand: pip install -r requirements.txt
+#     startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
+
 services:
   - type: web
     name: codesense-ai
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
+    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --browser.gatherUsageStats=false
