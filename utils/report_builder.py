@@ -1,33 +1,7 @@
-"""
-╔══════════════════════════════════════════════════════════════╗
-║             REPORT BUILDER — report_builder.py              ║
-╚══════════════════════════════════════════════════════════════╝
-
-WHAT THIS DOES:
-───────────────
-Converts the full review results dict into a self-contained
-HTML file that users can download, share, and open in any browser.
-
-WHY A SEPARATE REPORT?
-──────────────────────
-The Streamlit UI is interactive but session-based — close the
-browser tab and the review is gone. The HTML report is a
-permanent, shareable artifact of the code review.
-
-"Self-contained" means:
-  - All CSS is inline (no external stylesheet files needed)
-  - All data is embedded in the HTML
-  - One file, opens anywhere
-
-USE CASE: Portfolio projects, code review documentation,
-team sharing, audit trails.
-"""
-
 from datetime import datetime
 
 
 def _severity_color(severity: str) -> str:
-    """Returns a hex color for a given severity level."""
     return {
         "critical": "#ff5e5e",
         "warning":  "#f5a623",
@@ -36,10 +10,7 @@ def _severity_color(severity: str) -> str:
 
 
 def _issues_to_html(issues: list, category_name: str) -> str:
-    """
-    Converts a list of issue dicts into an HTML section.
-    Each issue becomes a styled card with severity badge.
-    """
+  
     if not issues:
         return f"""
         <div class="no-issues">
@@ -74,15 +45,7 @@ def _issues_to_html(issues: list, category_name: str) -> str:
 
 
 def build_html_report(results: dict) -> str:
-    """
-    Builds a complete self-contained HTML report from review results.
-    
-    Args:
-        results: The full review results dict from session state
-    
-    Returns:
-        HTML string — the entire downloadable report file
-    """
+   
     scores    = results.get("scores", {})
     language  = results.get("language", "Unknown")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -126,7 +89,6 @@ def build_html_report(results: dict) -> str:
     s_label, s_color = score_label(security_score)
     q_label, q_color = score_label(quality_score)
 
-    # ── Full HTML document ───────────────────────────────────────────────
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>

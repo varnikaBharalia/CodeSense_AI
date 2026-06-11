@@ -1,27 +1,9 @@
-"""
-╔══════════════════════════════════════════════════════════════╗
-║              AI CODE REVIEWER — app.py                      ║
-║  This is the MAIN ENTRY POINT of the application.           ║
-║  It builds the entire Streamlit UI and connects all agents. ║
-╚══════════════════════════════════════════════════════════════╝
-
-HOW THIS FILE WORKS:
-────────────────────
-1. Streamlit renders the page top-to-bottom, re-running on each user interaction.
-2. We use st.session_state to remember results between re-runs.
-3. The user pastes code → clicks "Review" → three agents run in parallel
-   (bug, security, quality) → results are merged → displayed in tabs.
-
-Run with:  streamlit run app.py
-"""
-
-import streamlit as st          # The web framework — turns Python into a web app
-import asyncio                  # For running multiple agents at the same time (concurrently)
-import time                     # To measure how long the review takes
-from datetime import datetime   # To timestamp each review
+import streamlit as st        
+import asyncio                 
+import time                     
+from datetime import datetime   
 import os
-# import os
-from dotenv import load_dotenv  # 👈 Added this import
+from dotenv import load_dotenv 
 
 load_dotenv()
 
@@ -31,34 +13,24 @@ if not os.getenv("GROQ_API_KEY"):
     st.stop()
 
 
-# ── Our own modules ──────────────────────────────────────────────────────────
-from agents.bug_agent      import run_bug_agent        # Finds logic/runtime bugs
-from agents.security_agent import run_security_agent   # Finds vulnerabilities
-from agents.quality_agent  import run_quality_agent    # Checks code style/quality
-from agents.refactor_agent import run_refactor_agent   # Rewrites the code cleaner
-from utils.language_detect import detect_language      # Auto-detects Python/JS/etc.
-from utils.score_calculator import calculate_score     # Converts findings → 0–100 score
-from utils.report_builder  import build_html_report    # Converts results → HTML report
+from agents.bug_agent      import run_bug_agent        
+from agents.security_agent import run_security_agent  
+from agents.quality_agent  import run_quality_agent    
+from agents.refactor_agent import run_refactor_agent   
+from utils.language_detect import detect_language     
+from utils.score_calculator import calculate_score    
+from utils.report_builder  import build_html_report    
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  PAGE CONFIGURATION
-#  Must be the FIRST Streamlit call. Sets browser tab title, icon, layout.
-# ══════════════════════════════════════════════════════════════════════════════
+
 st.set_page_config(
     page_title="CodeSense AI — Intelligent Code Review",
     page_icon="⚡",
-    layout="wide",          # Use full browser width (not the narrow default)
+    layout="wide",         
     initial_sidebar_state="collapsed"
 )
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  CUSTOM CSS
-#  Streamlit's default styling is functional but generic.
-#  We inject CSS to create a dark, professional developer-focused theme.
-#  Variables at the top make it easy to change the color palette later.
-# ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
 /* ── CSS VARIABLES (Design tokens) ─────────────────────────────────────────
@@ -314,37 +286,18 @@ hr { border-color: var(--border) !important; }
 """, unsafe_allow_html=True)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  SESSION STATE INITIALIZATION
-#  Streamlit re-runs the whole script on every interaction.
-#  Session state persists values across re-runs (like a simple database).
-# ══════════════════════════════════════════════════════════════════════════════
 if "review_results" not in st.session_state:
-    st.session_state.review_results = None   # Will hold the analysis output dict
+    st.session_state.review_results = None  
 if "is_loading" not in st.session_state:
-    st.session_state.is_loading = False      # Controls the loading spinner
+    st.session_state.is_loading = False     
 if "review_time" not in st.session_state:
-    st.session_state.review_time = None      # How many seconds the review took
+    st.session_state.review_time = None     
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  HELPER: SCORE RING
-#  Renders a circular SVG progress ring showing the quality score.
-#  score: 0-100, color: CSS color string
-# ══════════════════════════════════════════════════════════════════════════════
 def render_score_ring(score: int, label: str, color: str) -> str:
-    """
-    Returns an HTML string with an SVG circle progress indicator.
-    
-    How the SVG circle math works:
-    - radius = 36px → circumference = 2π×36 ≈ 226px
-    - stroke-dasharray = circumference (full circle as dashes)
-    - stroke-dashoffset = circumference × (1 - score/100)
-      → 0 offset = full circle filled, 226 offset = empty
-    """
+   
     radius = 36
-    circumference = 2 * 3.14159 * radius  # ≈ 226.2
-    offset = circumference * (1 - score / 100)   # How much of circle is "empty"
+    circumference = 2 * 3.14159 * radius  
+    offset = circumference * (1 - score / 100)   
     
     return f"""
     <div class="score-ring-container">
@@ -369,19 +322,9 @@ def render_score_ring(score: int, label: str, color: str) -> str:
     </div>
     """
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  HELPER: RENDER ISSUES LIST
-#  Takes a list of issue dicts and renders them as styled cards.
-#  Each issue dict: { title, detail, line, severity, fix }
-# ══════════════════════════════════════════════════════════════════════════════
 def render_issues(issues: list, empty_message: str = "No issues found."):
-    """
-    Iterates over the issues list and renders each as a colored card.
-    severity must be one of: 'critical', 'warning', 'info'
-    """
+   
     if not issues:
-        # Green "all clear" message when nothing found
         st.markdown(f"""
         <div style="text-align:center;padding:2rem;color:#3dd68c;">
             <div style="font-size:2rem;">✓</div>
@@ -391,16 +334,13 @@ def render_issues(issues: list, empty_message: str = "No issues found."):
 
     for issue in issues:
         severity = issue.get("severity", "info").lower()
-        # Map severity to CSS class and badge class
         badge_class = f"badge-{severity}"
         card_class  = severity
 
-        # Build the optional "suggested fix" section
         fix_html = ""
         if issue.get("fix"):
             fix_html = f'<div class="issue-fix">💡 <strong>Fix:</strong> {issue["fix"]}</div>'
 
-        # Build the optional line number reference
         line_html = ""
         if issue.get("line"):
             line_html = f'<div class="issue-line">📍 Line {issue["line"]}</div>'
@@ -416,83 +356,19 @@ def render_issues(issues: list, empty_message: str = "No issues found."):
             {fix_html}
         </div>""", unsafe_allow_html=True)
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  ASYNC RUNNER
-#  Python's asyncio lets us run multiple coroutines simultaneously.
-#  This function runs all 3 agents in parallel so the total wait time
-#  is ~max(agent_times) instead of sum(agent_times).
-# ══════════════════════════════════════════════════════════════════════════════
 async def run_all_agents(code: str, language: str) -> dict:
-    """
-    Runs bug, security, and quality agents concurrently using asyncio.gather().
-    asyncio.gather() is like Promise.all() in JavaScript — it fires all tasks
-    at once and waits for all to complete.
     
-    Returns a dict with keys: bugs, security, quality
-    """
     bug_task      = run_bug_agent(code, language)
     security_task = run_security_agent(code, language)
     quality_task  = run_quality_agent(code, language)
 
-    # All three run AT THE SAME TIME here
     bugs, security, quality = await asyncio.gather(
         bug_task, security_task, quality_task
     )
     return {"bugs": bugs, "security": security, "quality": quality}
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  MAIN REVIEW FUNCTION
-#  Called when user clicks the "Review Code" button.
-#  Runs the async agents, then gets a refactored version sequentially.
-# ══════════════════════════════════════════════════════════════════════════════
-# def perform_review(code: str, language: str):
-#     """
-#     Orchestrates the full review pipeline:
-#     1. Detect language (if 'Auto')
-#     2. Run 3 agents concurrently
-#     3. Run refactor agent (uses findings from step 2 as context)
-#     4. Calculate scores
-#     5. Store everything in session state
-#     """
-#     start_time = time.time()
-
-#     # Step 1: Auto-detect language if user didn't specify
-#     if language == "Auto Detect":
-#         language = detect_language(code)
-
-#     # Step 2: Run all analysis agents concurrently
-#     # asyncio.run() starts a new event loop and blocks until complete
-#     agent_results = asyncio.run(run_all_agents(code, language))
-
-#     # Step 3: Run refactor agent (it gets the issues as context so it
-#     # knows WHAT to fix, not just that things are wrong)
-#     refactored = asyncio.run(
-#         run_refactor_agent(code, language, agent_results)
-#     )
-
-#     # Step 4: Calculate numeric scores from the findings
-#     scores = calculate_score(agent_results)
-
-#     # Step 5: Package everything into one results dict
-#     st.session_state.review_results = {
-#         "code":       code,
-#         "language":   language,
-#         "bugs":       agent_results["bugs"],
-#         "security":   agent_results["security"],
-#         "quality":    agent_results["quality"],
-#         "refactored": refactored,
-#         "scores":     scores,
-#         "timestamp":  datetime.now().strftime("%H:%M:%S")
-#     }
-#     st.session_state.review_time = round(time.time() - start_time, 1)
-
-
-
-
 async def _full_pipeline(code: str, language: str, run_refactor: bool) -> tuple:
-    """Single async pipeline — runs once, avoids double asyncio.run() crash."""
     agent_results = await run_all_agents(code, language)
     refactored = {}
     if run_refactor:
@@ -501,16 +377,13 @@ async def _full_pipeline(code: str, language: str, run_refactor: bool) -> tuple:
 
 
 def perform_review(code: str, language: str, run_refactor: bool = True):
-    """
-    Orchestrates the full review pipeline with error handling.
-    """
+ 
     try:
         start_time = time.time()
 
         if language == "Auto Detect":
             language = detect_language(code)
 
-        # Single asyncio.run() — avoids RuntimeError on hosted environments
         agent_results, refactored = asyncio.run(
             _full_pipeline(code, language, run_refactor)
         )
@@ -534,9 +407,6 @@ def perform_review(code: str, language: str, run_refactor: bool = True):
 
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  UI — HERO HEADER
-# ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <div class="hero-header">
     <div class="hero-title">⚡ CodeSense AI</div>
@@ -547,20 +417,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  UI — TWO-COLUMN LAYOUT
-#  Left: code input + options
-#  Right: results display
-# ══════════════════════════════════════════════════════════════════════════════
 left_col, right_col = st.columns([1, 1.4], gap="large")
 
-# ─────────────────────────────────────────────────────
-#  LEFT COLUMN — Input Panel
-# ─────────────────────────────────────────────────────
 with left_col:
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    # Language selector — 'Auto Detect' uses our language_detect utility
     language = st.selectbox(
         "Language",
         ["Auto Detect", "Python", "JavaScript", "TypeScript",
@@ -568,23 +429,8 @@ with left_col:
         help="Select your programming language or let AI detect it automatically"
     )
 
-    # The main code input area
-    # height=400 gives comfortable space for medium-sized functions
-#     code_input = st.text_area(
-#         "Paste your code here",
-#         height=400,
-#         placeholder="""# Example: paste any code snippet
-# def calculate_discount(price, discount):
-#     result = price / discount   # Bug: division, not subtraction
-#     password = "admin123"       # Security: hardcoded credential
-#     return result
-# """,
-#         help="Paste any code snippet — functions, classes, or full files"
-#     )
 
 
-
-# Pre-fill textarea if a sample was clicked
     default_code = st.session_state.pop("sample_code", "")
 
     code_input = st.text_area(
@@ -602,29 +448,13 @@ def calculate_discount(price, discount):
     )
 
 
-    # Options row — two toggles side by side
     opt_col1, opt_col2 = st.columns(2)
     with opt_col1:
-        # If True, refactor agent runs and produces cleaned code
         show_refactor = st.checkbox("Generate refactored code", value=True)
     with opt_col2:
-        # If True, we display a downloadable HTML report at the end
         show_report = st.checkbox("Export HTML report", value=False)
 
     st.markdown("</div>", unsafe_allow_html=True)
-
-    # ── REVIEW BUTTON ──────────────────────────────────────────────────────
-    # if st.button("⚡ Review Code", type="primary"):
-    #     if not code_input.strip():
-    #         st.error("Please paste some code before reviewing.")
-    #     elif len(code_input.strip()) < 20:
-    #         st.warning("Code seems too short. Paste a real function or class.")
-    #     else:
-    #         # Show a spinner while the agents are working
-    #         with st.spinner("Running multi-agent analysis..."):
-    #             perform_review(code_input, language)
-    #         st.rerun()   # Trigger a re-render to show results
-
 
     if st.button("⚡ Review Code", type="primary"):
         if not code_input.strip():
@@ -638,8 +468,6 @@ def calculate_discount(price, discount):
                 perform_review(code_input, language, show_refactor)
             st.rerun()
 
-    # ── SAMPLE CODE BUTTONS ──────────────────────────────────────────────
-    # These let users try the app without typing any code
     st.markdown("#### Try a sample")
     s1, s2, s3 = st.columns(3)
 
@@ -727,24 +555,15 @@ public class FileProcessor {
             st.session_state["sample_code"] = SAMPLE_JAVA
             st.rerun()
 
-    # If a sample was selected in a previous run, pre-fill the textarea
-    # (Streamlit doesn't support direct textarea value injection after render,
-    # so we show it as a read-only preview instead)
-    # if "sample_code" in st.session_state:
-    #     st.info("Sample loaded! Copy the code above into the input box.")
-    #     st.code(st.session_state["sample_code"])
-    if "sample_code" in st.session_state:        # line 644 — DELETE
-        st.info("Sample loaded! Copy the code above into the input box.")  # line 645 — DELETE
-        st.code(st.session_state["sample_code"])  # line 646 — DELETE
+ 
+    if "sample_code" in st.session_state:      
+        st.info("Sample loaded! Copy the code above into the input box.")  
+        st.code(st.session_state["sample_code"])
 
-# ─────────────────────────────────────────────────────
-#  RIGHT COLUMN — Results Panel
-# ─────────────────────────────────────────────────────
 with right_col:
     results = st.session_state.review_results
 
     if results is None:
-        # ── EMPTY STATE (no review yet) ──────────────────────────────────
         st.markdown("""
         <div style="text-align:center;padding:4rem 2rem;color:#4a5568;">
             <div style="font-size:3rem;margin-bottom:1rem;">🔍</div>
@@ -785,10 +604,8 @@ with right_col:
         """, unsafe_allow_html=True)
 
     else:
-        # ── RESULTS DISPLAY ────────────────────────────────────────────────
         scores = results["scores"]
 
-        # ── Review metadata bar ──────────────────────────────────────────
         review_time = st.session_state.review_time or "?"
         st.markdown(f"""
         <div style="display:flex;align-items:center;gap:1rem;
@@ -803,14 +620,11 @@ with right_col:
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Score rings row ──────────────────────────────────────────────
-        # Four score circles: Overall, Security, Quality, Bugs
         overall_score   = scores["overall"]
         security_score  = scores["security"]
         quality_score   = scores["quality"]
         bug_score       = scores["bugs"]
 
-        # Pick color based on score range
         def score_color(s):
             if s >= 80: return "#3dd68c"   # Green  — good
             if s >= 60: return "#f5a623"   # Amber  — mediocre
@@ -828,8 +642,6 @@ with right_col:
 
         st.divider()
 
-        # ── Tabs: one per analysis area ──────────────────────────────────
-        # Count issues for tab labels
         n_bugs     = len(results["bugs"])
         n_security = len(results["security"])
         n_quality  = len(results["quality"])
@@ -841,7 +653,6 @@ with right_col:
             "✨ Refactored"
         ])
 
-        # ── Bugs Tab ─────────────────────────────────────────────────────
         with tab_bugs:
             if n_bugs == 0:
                 render_issues([], "No bugs detected!")
@@ -849,7 +660,6 @@ with right_col:
                 st.markdown(f"**{n_bugs} issue(s) found** — review each carefully.")
                 render_issues(results["bugs"])
 
-        # ── Security Tab ─────────────────────────────────────────────────
         with tab_security:
             if n_security == 0:
                 render_issues([], "No security vulnerabilities found!")
@@ -857,7 +667,6 @@ with right_col:
                 st.markdown(f"**{n_security} vulnerability(ies) found** — address critical ones immediately.")
                 render_issues(results["security"])
 
-        # ── Quality Tab ──────────────────────────────────────────────────
         with tab_quality:
             if n_quality == 0:
                 render_issues([], "Code quality looks great!")
@@ -865,23 +674,19 @@ with right_col:
                 st.markdown(f"**{n_quality} quality suggestion(s)** — these improve maintainability.")
                 render_issues(results["quality"])
 
-        # ── Refactored Code Tab ──────────────────────────────────────────
         with tab_refactor:
             refactored = results.get("refactored", {})
             if refactored.get("code"):
                 st.markdown("**Refactored version** — all issues addressed, clean and production-ready:")
-                # st.code renders the code with syntax highlighting
                 st.code(refactored["code"], language=results["language"].lower())
 
                 if refactored.get("summary"):
                     with st.expander("What changed?"):
-                        # Summary is a list of change descriptions
                         for change in refactored["summary"]:
                             st.markdown(f"- {change}")
             else:
                 st.info("Enable 'Generate refactored code' and re-run to see the cleaned version.")
 
-        # ── Export HTML Report ────────────────────────────────────────────
         if show_report:
             st.divider()
             html_report = build_html_report(results)

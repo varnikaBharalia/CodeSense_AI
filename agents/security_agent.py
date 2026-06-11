@@ -1,38 +1,4 @@
-"""
-╔══════════════════════════════════════════════════════════════╗
-║           SECURITY SCANNING AGENT — security_agent.py       ║
-╚══════════════════════════════════════════════════════════════╝
 
-WHAT THIS AGENT DOES:
-─────────────────────
-Scans code for security vulnerabilities, specifically:
-  - OWASP Top 10 (the most common/critical web vulnerabilities)
-  - Hardcoded secrets (API keys, passwords, tokens)
-  - Injection vulnerabilities (SQL, command, LDAP injection)
-  - Insecure data handling (logging sensitive data, weak crypto)
-  - Authentication/authorization issues
-  - Insecure deserialization
-
-WHY SECURITY IS A SEPARATE AGENT:
-──────────────────────────────────
-Security analysis requires a completely different mindset from
-bug detection. A security reviewer thinks like an attacker:
-"How can this code be exploited?" The prompt is crafted to
-put the LLM in that mindset specifically.
-
-OWASP TOP 10 REFERENCE:
-────────────────────────
-A1: Broken Access Control
-A2: Cryptographic Failures
-A3: Injection (SQL, OS, LDAP)
-A4: Insecure Design
-A5: Security Misconfiguration
-A6: Vulnerable & Outdated Components
-A7: Identification & Authentication Failures
-A8: Software & Data Integrity Failures
-A9: Security Logging & Monitoring Failures
-A10: Server-Side Request Forgery (SSRF)
-"""
 import json
 import asyncio
 from dotenv import load_dotenv
@@ -41,10 +7,9 @@ from langchain_core.messages import SystemMessage, HumanMessage
 load_dotenv()
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  LLM INSTANCE
-#  Same model as the bug agent. We keep temperature=0 for consistency.
-# ══════════════════════════════════════════════════════════════════════════════
+
+
+
 llm = ChatGroq(
     model="llama-3.3-70b-versatile",
     temperature=0,
@@ -52,12 +17,6 @@ llm = ChatGroq(
 )
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  SYSTEM PROMPT
-#  Optimized specifically for security analysis.
-#  Key difference from bug prompt: we include specific CVE patterns and
-#  OWASP categories so the LLM knows exactly what to look for.
-# ══════════════════════════════════════════════════════════════════════════════
 SECURITY_SYSTEM_PROMPT = """You are a senior application security engineer (AppSec) specializing in secure code review.
 
 Your task is to analyze code for SECURITY VULNERABILITIES ONLY. Do not report bugs or style issues.
@@ -120,10 +79,7 @@ If NO vulnerabilities found, return: []
 
 
 def _parse_json_response(text: str) -> list:
-    """
-    Identical parsing logic to bug_agent.
-    Strips markdown fences, parses JSON, handles errors gracefully.
-    """
+  
     text = text.strip()
     if text.startswith("```"):
         first_newline = text.find("\n")
@@ -140,18 +96,7 @@ def _parse_json_response(text: str) -> list:
 
 
 async def run_security_agent(code: str, language: str) -> list:
-    """
-    Async security vulnerability scanner.
-    
-    Runs concurrently with other agents via asyncio.gather() in app.py.
-    
-    Args:
-        code:     Source code to analyze
-        language: Programming language (affects which vulnerabilities to look for)
-    
-    Returns:
-        List of vulnerability dicts: [{ title, detail, line, severity, fix }, ...]
-    """
+   
     human_message = f"""Perform a security analysis of this {language} code.
 Look for all OWASP Top 10 vulnerabilities and security anti-patterns.
 

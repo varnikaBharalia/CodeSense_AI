@@ -1,41 +1,4 @@
-"""
-╔══════════════════════════════════════════════════════════════╗
-║             REFACTOR AGENT — refactor_agent.py              ║
-╚══════════════════════════════════════════════════════════════╝
 
-WHAT THIS AGENT DOES:
-─────────────────────
-Unlike the other three agents which only FIND problems, this agent
-FIXES them. It takes:
-  - The original code
-  - The full findings from the bug, security, and quality agents
-And produces:
-  - A clean, corrected, well-structured version of the code
-  - A human-readable summary of what changed and why
-
-WHY THIS AGENT RUNS LAST:
-─────────────────────────
-The refactor agent is given the findings from the other three agents
-as INPUT. This is a key design pattern:
-
-  [Bug Agent]       ──┐
-  [Security Agent]  ──┼──► [Refactor Agent] ──► Clean Code
-  [Quality Agent]   ──┘
-
-By passing the findings, the refactor agent:
-  1. Knows EXACTLY what to fix (not guessing)
-  2. Can explain each change referencing the original finding
-  3. Produces a more targeted and accurate refactor
-
-This is an example of "agent chaining" — one agent's output
-becomes another agent's input.
-
-DESIGN NOTE:
-────────────
-The refactor agent returns BOTH the refactored code AND a
-list of changes. This lets us show the user a diff-like
-"what changed" summary without actually doing a diff.
-"""
 import json
 import asyncio
 from dotenv import load_dotenv
@@ -82,14 +45,9 @@ The "summary" must list each meaningful change made, referencing the original is
 
 
 def _parse_refactor_response(text: str) -> dict:
-    """
-    Parses the refactor agent's JSON response.
-    Returns a dict with keys: 'code' and 'summary'.
-    Falls back gracefully if parsing fails.
-    """
+   
     text = text.strip()
     
-    # Strip markdown code fences
     if text.startswith("```"):
         first_newline = text.find("\n")
         last_fence    = text.rfind("```")
@@ -98,13 +56,11 @@ def _parse_refactor_response(text: str) -> dict:
     
     try:
         result = json.loads(text)
-        # Validate required keys exist
         if "code" in result:
             return result
         return {"code": "", "summary": ["Could not parse refactored code."]}
     except json.JSONDecodeError:
-        # If JSON fails, try to extract code from the text directly
-        # (sometimes the LLM returns raw code instead of JSON)
+        
         return {
             "code": text,
             "summary": ["Refactored code generated (summary unavailable)"]
@@ -112,21 +68,7 @@ def _parse_refactor_response(text: str) -> dict:
 
 
 async def run_refactor_agent(code: str, language: str, findings: dict) -> dict:
-    """
-    Async refactoring agent — runs AFTER the three analysis agents.
-    
-    Args:
-        code:     Original source code
-        language: Programming language
-        findings: Dict with keys 'bugs', 'security', 'quality' (from the 3 agents)
-    
-    Returns:
-        Dict with keys:
-          'code'    — the refactored source code string
-          'summary' — list of strings describing what changed
-    """
-    # Format the findings as readable text for the LLM
-    # We convert each finding list to a numbered list string
+   
     def format_findings(findings_list: list, label: str) -> str:
         if not findings_list:
             return f"{label}: None found\n"

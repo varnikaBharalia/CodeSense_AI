@@ -1,47 +1,4 @@
-"""
-╔══════════════════════════════════════════════════════════════╗
-║           CODE QUALITY AGENT — quality_agent.py             ║
-╚══════════════════════════════════════════════════════════════╝
 
-WHAT THIS AGENT DOES:
-─────────────────────
-Reviews code quality, readability, and maintainability.
-Unlike bugs (correctness) or security (safety), quality issues
-are about how GOOD the code is to work with long-term.
-
-WHAT QUALITY MEANS HERE:
-─────────────────────────
-1. SOLID Principles (for OOP):
-   - S: Single Responsibility — one class/function does one thing
-   - O: Open/Closed — open for extension, closed for modification
-   - L: Liskov Substitution — subclasses behave like parent classes
-   - I: Interface Segregation — don't force implementing unused methods
-   - D: Dependency Inversion — depend on abstractions, not concretions
-
-2. Complexity:
-   - Cyclomatic complexity (too many branches/conditions in one function)
-   - Deeply nested code (pyramid of doom)
-   - Functions that are too long (> 40-50 lines usually)
-
-3. Naming:
-   - Variables named 'x', 'temp', 'data' without context
-   - Functions named 'process', 'handle', 'do_thing'
-   - Magic numbers (what is 86400? → should be SECONDS_PER_DAY)
-
-4. Documentation:
-   - Missing docstrings on public functions/classes
-   - Missing type hints in Python
-   - Outdated or misleading comments
-
-5. DRY Principle (Don't Repeat Yourself):
-   - Copy-pasted code blocks
-   - Similar functions that could be generalized
-
-6. Error Handling:
-   - Bare `except:` clauses (catches everything including SystemExit)
-   - Missing error handling entirely
-   - Overly broad exception handling
-"""
 import json
 import asyncio
 from dotenv import load_dotenv
@@ -129,16 +86,7 @@ def _parse_json_response(text: str) -> list:
 
 
 async def run_quality_agent(code: str, language: str) -> list:
-    """
-    Async code quality grader.
     
-    Args:
-        code:     Source code to grade
-        language: Programming language (affects language-specific quality rules)
-    
-    Returns:
-        List of quality issue dicts
-    """
     human_message = f"""Review this {language} code for quality, maintainability, and clean code principles.
 
 ```{language.lower()}
